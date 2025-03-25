@@ -5,7 +5,7 @@ A simple command-line tool to automate version bumping in repositories that use 
 ## Installation
 
 ```bash
-go install github.com/markpreston/vbump/cmd/vbump@latest
+go install github.com/lavabyrd/vbump/cmd/vbump@latest
 ```
 
 ## Usage
