@@ -15,6 +15,7 @@ const VERSION_FILE = "VERSION"
 func main() {
 	major := flag.Bool("major", false, "increment major version and reset minor and patch to 0")
 	minor := flag.Bool("minor", false, "increment minor version and reset patch to 0")
+	protocol := flag.String("protocol", "", "protocol name (e.g., solana)")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
@@ -22,9 +23,10 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Flags:\n")
 		flag.PrintDefaults()
 		fmt.Fprintf(os.Stderr, "\nExamples:\n")
-		fmt.Fprintf(os.Stderr, "  %s              # Increment patch version (e.g., 1.12.2 -> 1.12.3)\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "  %s --minor      # Increment minor version (e.g., 1.12.2 -> 1.13.0)\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "  %s --major      # Increment major version (e.g., 1.12.2 -> 2.0.0)\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s                          # Increment patch version (e.g., 1.12.2 -> 1.12.3)\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s --minor                  # Increment minor version (e.g., 1.12.2 -> 1.13.0)\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s --major                  # Increment major version (e.g., 1.12.2 -> 2.0.0)\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s --protocol=solana        # Use protocol-specific version bumping (e.g., solana-1.12.2 -> solana-1.12.3)\n", os.Args[0])
 	}
 
 	flag.Parse()
@@ -35,9 +37,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	versionPath := filepath.Join(dir, VERSION_FILE)
+	var versionPath string
+	if *protocol != "" {
+		versionPath = filepath.Join(dir, "plugins", *protocol, VERSION_FILE)
+	} else {
+		versionPath = filepath.Join(dir, VERSION_FILE)
+	}
+
 	if _, err := os.Stat(versionPath); os.IsNotExist(err) {
-		fmt.Fprintf(os.Stderr, "Error: %s file not found in current directory\n", VERSION_FILE)
+		fmt.Fprintf(os.Stderr, "Error: %s file not found at %s\n", VERSION_FILE, versionPath)
 		os.Exit(1)
 	}
 
@@ -45,6 +53,17 @@ func main() {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error reading version: %v\n", err)
 		os.Exit(1)
+	}
+
+	originalVersion := currentVersion
+
+	if *protocol != "" {
+		prefix := *protocol + "-"
+		if !strings.HasPrefix(currentVersion, prefix) {
+			fmt.Fprintf(os.Stderr, "Error: version %s does not have expected prefix %s\n", currentVersion, prefix)
+			os.Exit(1)
+		}
+		currentVersion = strings.TrimPrefix(currentVersion, prefix)
 	}
 
 	parts := strings.Split(currentVersion, ".")
@@ -63,12 +82,23 @@ func main() {
 		newVersion = fmt.Sprintf("%s.%s.%d", parts[0], parts[1], atoi(parts[2])+1)
 	}
 
+	makeVersion := newVersion
+	if *protocol != "" {
+		newVersion = *protocol + "-" + newVersion
+	}
+
 	if err := checkGitStatus(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 
-	cmd := exec.Command("make", "bump", fmt.Sprintf("VERSION=%s", newVersion))
+	args := []string{"bump"}
+	args = append(args, fmt.Sprintf("VERSION=%s", makeVersion))
+	if *protocol != "" {
+		args = append(args, fmt.Sprintf("PROTOCOL=%s", *protocol))
+	}
+
+	cmd := exec.Command("make", args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
@@ -76,7 +106,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("Successfully bumped version from %s to %s\n", currentVersion, newVersion)
+	fmt.Printf("Successfully bumped version from %s to %s\n", originalVersion, newVersion)
 }
 
 func readVersion(path string) (string, error) {
