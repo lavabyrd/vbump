@@ -15,7 +15,6 @@ const VERSION_FILE = "VERSION"
 func main() {
 	major := flag.Bool("major", false, "increment major version and reset minor and patch to 0")
 	minor := flag.Bool("minor", false, "increment minor version and reset patch to 0")
-	protocol := flag.String("protocol", "", "protocol name (e.g., solana)")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
@@ -26,7 +25,6 @@ func main() {
 		fmt.Fprintf(os.Stderr, "  %s                          # Increment patch version (e.g., 1.12.2 -> 1.12.3)\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "  %s --minor                  # Increment minor version (e.g., 1.12.2 -> 1.13.0)\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "  %s --major                  # Increment major version (e.g., 1.12.2 -> 2.0.0)\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "  %s --protocol=solana        # Use protocol-specific version bumping (e.g., solana-1.12.2 -> solana-1.12.3)\n", os.Args[0])
 	}
 
 	flag.Parse()
@@ -37,12 +35,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	var versionPath string
-	if *protocol != "" {
-		versionPath = filepath.Join(dir, "plugins", *protocol, VERSION_FILE)
-	} else {
-		versionPath = filepath.Join(dir, VERSION_FILE)
-	}
+	versionPath := filepath.Join(dir, VERSION_FILE)
 
 	if _, err := os.Stat(versionPath); os.IsNotExist(err) {
 		fmt.Fprintf(os.Stderr, "Error: %s file not found at %s\n", VERSION_FILE, versionPath)
@@ -56,15 +49,6 @@ func main() {
 	}
 
 	originalVersion := currentVersion
-
-	if *protocol != "" {
-		prefix := *protocol + "-"
-		if !strings.HasPrefix(currentVersion, prefix) {
-			fmt.Fprintf(os.Stderr, "Error: version %s does not have expected prefix %s\n", currentVersion, prefix)
-			os.Exit(1)
-		}
-		currentVersion = strings.TrimPrefix(currentVersion, prefix)
-	}
 
 	parts := strings.Split(currentVersion, ".")
 	if len(parts) != 3 {
@@ -83,9 +67,6 @@ func main() {
 	}
 
 	makeVersion := newVersion
-	if *protocol != "" {
-		newVersion = *protocol + "-" + newVersion
-	}
 
 	if err := checkGitStatus(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -94,9 +75,6 @@ func main() {
 
 	args := []string{"bump"}
 	args = append(args, fmt.Sprintf("VERSION=%s", makeVersion))
-	if *protocol != "" {
-		args = append(args, fmt.Sprintf("PROTOCOL=%s", *protocol))
-	}
 
 	cmd := exec.Command("make", args...)
 	cmd.Stdout = os.Stdout
